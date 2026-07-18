@@ -27,6 +27,7 @@ class Simulator:
         history = []
         for _ in range(n_ticks):
             self._tick_count += 1
+            self.market_data_generator.advance_tick()
             K = self._rng.poisson(self._poisson_lambda) # Sample the number of orders to generate from a Poisson distribution
 
             for _ in range(K):

@@ -1,17 +1,31 @@
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
-from market_data import MarketDataGenerator
+from market_data import MarketDataGenerator, HistoricalMarketDataGenerator
 from order_book import OrderBook
 from simulator import Simulator
 
 
-def build_history(n_ticks, initial_price=100.0, seed=None):
+def build_synthetic_history(n_ticks, initial_price=100.0, seed=None):
     """
-    Build a synthetic simulation run and return the history list of dicts
-    for each step, ready to be passed to show_interactive().
+    Build a synthetic simulation run (random-walk reference price) and
+    return the history list of dicts, ready to be passed to
+    show_interactive().
     """
     market_data_generator = MarketDataGenerator(initial_price=initial_price, seed=seed)
+    order_book = OrderBook()
+    simulator = Simulator(order_book, market_data_generator, seed=seed)
+    history = simulator.run(n_ticks)
+    return history
+
+
+def build_historical_history(csv_path, n_ticks, seed=None):
+    """
+    Build a simulation run driven by a real historical price series (see
+    fetch_historical_data.py / HistoricalMarketDataGenerator) and return
+    the history list of dicts, ready to be passed to show_interactive().
+    """
+    market_data_generator = HistoricalMarketDataGenerator(csv_path, seed=seed)
     order_book = OrderBook()
     simulator = Simulator(order_book, market_data_generator, seed=seed)
     history = simulator.run(n_ticks)
@@ -40,7 +54,7 @@ def _draw_depth(ax, depth_snapshot):
     ax.legend(loc='upper right')
 
 
-def show_interactive(history):
+def show_interactive(history, title="Simulation"):
     """
     Build the matplotlib figure: top panel with the four price series
     and a slider, bottom panel with the depth chart for whichever step
@@ -53,6 +67,7 @@ def show_interactive(history):
     best_asks = [entry['best_ask'] if entry['best_ask'] is not None else float('nan') for entry in history]
 
     fig, (ax_price, ax_depth) = plt.subplots(2, 1, figsize=(10, 8))
+    fig.canvas.manager.set_window_title(title)
     plt.subplots_adjust(bottom=0.2, hspace=0.4)
 
     ax_price.plot(x, reference_prices, label='Reference Price', color='blue')
@@ -83,5 +98,8 @@ def show_interactive(history):
 
 
 if __name__ == "__main__":
-    history = build_history(n_ticks=200, seed=42)
-    show_interactive(history)
+    synthetic_history = build_synthetic_history(n_ticks=200, seed=42)
+    show_interactive(synthetic_history, title="Synthetic Data Simulation")
+
+    historical_history = build_historical_history("data/AAPL_1m.csv", n_ticks=400, seed=42)
+    show_interactive(historical_history, title="Historical Data Simulation (AAPL, 1m)")
