@@ -12,9 +12,12 @@ class MarketDataGenerator:
 
         # Generate order side
         side = order_side.BUY if self._rng.random() < 0.5 else order_side.SELL
+        if side == order_side.BUY:
+            price_offset = self._rng.normalvariate(-0.5, 0.2)
+        else:
+            price_offset = self._rng.normalvariate(0.5, 0.2)
 
         # Generate order price offset from reference price
-        price_offset = self._rng.normalvariate(0.2, 0.5)
         order_price = max(0.01, self._reference_price + price_offset)  # Ensure positive price
 
         # Generate order quantity

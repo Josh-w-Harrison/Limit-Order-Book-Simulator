@@ -6,15 +6,15 @@ from order_book import OrderBook
 from simulator import Simulator
 
 
-def build_history(n_steps, initial_price=100.0, seed=None):
+def build_history(n_ticks, initial_price=100.0, seed=None):
     """
     Build a synthetic simulation run and return the history list of dicts
     for each step, ready to be passed to show_interactive().
     """
     market_data_generator = MarketDataGenerator(initial_price=initial_price, seed=seed)
     order_book = OrderBook()
-    simulator = Simulator(order_book, market_data_generator)
-    history = simulator.run(n_steps)
+    simulator = Simulator(order_book, market_data_generator, seed=seed)
+    history = simulator.run(n_ticks)
     return history
 
 
@@ -83,5 +83,5 @@ def show_interactive(history):
 
 
 if __name__ == "__main__":
-    history = build_history(n_steps=200, seed=42)
+    history = build_history(n_ticks=200, seed=42)
     show_interactive(history)
