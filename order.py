@@ -17,12 +17,12 @@ class order_type(Enum):
 class Order:
     _id_counter = count(1)
 
-    def __init__(self, side, type, price, quantity):
+    def __init__(self, side, type = order_type.LIMIT, price = 0.0, quantity = 0):
         self.side = side
         self.type = type
         self.price = price
-        self.quantity = quantity 
+        self.quantity = quantity
         self.order_id = next(Order._id_counter)
 
     def __repr__(self):
-        return f"Order(side={self.side!r}, price={self.price!r}, quantity={self.quantity!r})"
+        return f"Order(side={self.side!r}, type={self.type!r}, price={self.price!r}, quantity={self.quantity!r})"

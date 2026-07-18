@@ -1,5 +1,6 @@
 from sortedcontainers import SortedDict
 
+from order import order_side
 from price_level import PriceLevel
 from trade import Trade
 
@@ -68,7 +69,7 @@ class OrderBook:
         # until either the incoming order is fully filled or the book stops crossing.
         trade_records = []
         while order.quantity > 0:
-            if order.side == "BUY":
+            if order.side == order_side.BUY:
                 if not self.asks:
                     break  # no asks to match against
                 best_ask_price, best_ask_level = self.asks.peekitem(0)
@@ -112,7 +113,7 @@ class OrderBook:
                 ))
         # If any quantity remains unfilled, rest it on the book on its own side, creating a new PriceLevel if needed.
         if order.quantity > 0:
-            if order.side == "BUY":
+            if order.side == order_side.BUY:
                 if order.price not in self.bids:
                     self.bids[order.price] = PriceLevel(order.price)
                 self.bids[order.price].add(order)
@@ -136,7 +137,7 @@ class OrderBook:
             return  # Order not found, nothing to cancel
 
         side, price = self.order_locations[order_id]
-        if side == "BUY":
+        if side == order_side.BUY:
             price_level = self.bids.get(price)
         else:  # SELL
             price_level = self.asks.get(price)
@@ -144,7 +145,7 @@ class OrderBook:
         if price_level:
             price_level.remove_order(order_id)
             if price_level.is_empty():
-                if side == "BUY":
+                if side == order_side.BUY:
                     del self.bids[price]
                 else:
                     del self.asks[price]
