@@ -12,7 +12,7 @@ class MarketEvent:
     A single unit of market activity handed from a generator to
     Simulator.step(). type determines which fields are populated:
       SUBMIT -> order is set (a brand new Order to run through add_order)
-      CANCEL -> order_id is set (our own mapped id, to run through cancel_order)
+      CANCEL -> order_id is set (the internal mapped id, to run through cancel_order)
       REDUCE -> order_id and quantity are set (to run through reduce_order)
     """
     type: market_event_type
@@ -99,7 +99,7 @@ class LOBSTERMarketDataGenerator:
 
         self._current_index = 0
         self._reference_price = None  # Will be set when first Type 4 is encountered
-        self._lobster_to_our_order_id = {}
+        self._lobster_to_internal_id = {}
         self._rng = random.Random(seed)
         self._EventType_mapping = {
             1: market_event_type.SUBMIT,
@@ -124,24 +124,24 @@ class LOBSTERMarketDataGenerator:
                 continue
 
             if type in (market_event_type.CANCEL, market_event_type.REDUCE) \
-                    and order_id not in self._lobster_to_our_order_id:
+                    and order_id not in self._lobster_to_internal_id:
                 self._current_index += 1
                 continue
 
             break  # row is usable -- fall through to build the event
 
         if type == market_event_type.CANCEL or type == market_event_type.REDUCE:
-            our_order_id = self._lobster_to_our_order_id[order_id]
+            internal_id = self._lobster_to_internal_id[order_id]
             order_quantity = self._sizes[self._current_index]
             self._current_index += 1
-            return MarketEvent(type, order_id=our_order_id, quantity=order_quantity)
+            return MarketEvent(type, order_id=internal_id, quantity=order_quantity)
         elif type_num == 1:
-            # For SUBMIT, we create a new Order and map the LOBSTER order ID to our own
+            # For SUBMIT, we create a new Order and map the LOBSTER order ID to its internal id
             order_price = self._prices[self._current_index] / 10000.0  # Convert back to actual price
             order_quantity = self._sizes[self._current_index]
             side = order_side.BUY if self._directions[self._current_index] == 1 else order_side.SELL
             order = Order(price=order_price, quantity=order_quantity, side=side)
-            self._lobster_to_our_order_id[order_id] = order.order_id
+            self._lobster_to_internal_id[order_id] = order.order_id
             self._current_index += 1
             return MarketEvent(type, order=order)
         else: # type_num == 4, aggressive order to match resting order

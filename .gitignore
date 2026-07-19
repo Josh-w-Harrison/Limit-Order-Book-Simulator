@@ -218,6 +218,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Fetched/downloaded market data -- regenerate via fetch_historical_data.py
-# (Yahoo Finance) or by downloading a sample from lobsterdata.com (LOBSTER
-# academic data isn't ours to redistribute, and the samples are large).
+# (Yahoo Finance) or by downloading a sample from lobsterdata.com 
 data/
+tests/
