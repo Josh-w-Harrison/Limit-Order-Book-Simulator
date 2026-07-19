@@ -33,6 +33,22 @@ class PriceLevel:
         if front_order.quantity == 0:
             self.orders.popleft()
 
+    def reduce_order(self, order_id, quantity):
+        """Returns True if the reduction fully removed the order from this
+        level (so the caller can clean up order_locations even when the
+        level itself doesn't become empty), False if it was just shrunk."""
+        for order in self.orders:
+            if order.order_id == order_id:
+                if quantity >= order.quantity:
+                    # If the reduction quantity is greater than or equal to the order's quantity, remove the order
+                    self.remove_order(order_id)
+                    return True
+                else:
+                    # Reduce the order's quantity
+                    order.quantity -= quantity
+                    self.total_quantity -= quantity
+                    return False
+
     def remove_order(self, id):
         for i, o in enumerate(self.orders):
             if o.order_id == id:

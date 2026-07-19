@@ -92,6 +92,26 @@ class OrderBook:
 
         del self.order_locations[order_id]
 
+    def reduce_order(self, order_id, quantity):
+        if order_id not in self.order_locations:
+            return  # Order not found, nothing to reduce
+
+        side, price = self.order_locations[order_id]
+        if side == order_side.BUY:
+            price_level = self.bids.get(price)
+        else:  # SELL
+            price_level = self.asks.get(price)
+
+        if price_level:
+            fully_removed = price_level.reduce_order(order_id, quantity)
+            if fully_removed:
+                del self.order_locations[order_id]
+            if price_level.is_empty():
+                if side == order_side.BUY:
+                    del self.bids[price]
+                else:
+                    del self.asks[price]
+
     def best_bid(self):
         return self.bids.peekitem(-1)[0] if self.bids else None
 
@@ -109,8 +129,13 @@ class OrderBook:
         return (best_bid + best_ask) / 2 if best_bid is not None and best_ask is not None else None
 
     def get_depth(self, levels=5):
-        bid_depth = [(price, level.total_quantity) for price, level in reversed(self.bids.items())][:levels]
-        ask_depth = [(price, level.total_quantity) for price, level in self.asks.items()][:levels]
+        # Slice the sorted keys by position (O(log n + levels)) instead of
+        # reversing/iterating the entire SortedDict (O(n)) just to keep the
+        # top few levels -- matters once the book gets deep.
+        bid_keys = self.bids.keys()[-levels:]
+        ask_keys = self.asks.keys()[:levels]
+        bid_depth = [(price, self.bids[price].total_quantity) for price in reversed(bid_keys)]
+        ask_depth = [(price, self.asks[price].total_quantity) for price in ask_keys]
         return {'bids': bid_depth, 'asks': ask_depth}
 
     def __repr__(self):

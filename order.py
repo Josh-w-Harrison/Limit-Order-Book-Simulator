@@ -7,12 +7,18 @@ class order_side(Enum):
     SELL = "SELL"
 
 
-# Currently only supports LIMIT but I will add MARKET and IOC in the future
+# Currently only supports LIMIT but I may add MARKET and IOC in the future
 class order_type(Enum):
     LIMIT = "LIMIT"    # rests on the book if not fully matched
     MARKET = "MARKET"  # matches immediately at best available price(s), never rests
     IOC = "IOC"        # Immediate-Or-Cancel: matches what it can right now,
                         # unfilled remainder is dropped, never rests
+
+
+class market_event_type(Enum):
+    SUBMIT = "SUBMIT"  # a new order enters the book (matches immediately and/or rests)
+    CANCEL = "CANCEL"  # a resting order is removed entirely
+    REDUCE = "REDUCE"  # a resting order's quantity is reduced but it keeps resting
 
 class Order:
     _id_counter = count(1)
