@@ -69,7 +69,7 @@ def _draw_depth(ax, depth_snapshot):
     ax.legend(loc='upper right')
 
 
-def show_interactive(history, title="Simulation"):
+def show_interactive(history, title="Simulation", max_price_points=3000):
     """
     Build the matplotlib figure: top panel with the four price series
     and a slider, bottom panel with the depth chart for whichever step
@@ -85,14 +85,25 @@ def show_interactive(history, title="Simulation"):
     best_bids = [entry['best_bid'] if entry['best_bid'] is not None else float('nan') for entry in history]
     best_asks = [entry['best_ask'] if entry['best_ask'] is not None else float('nan') for entry in history]
 
+    # Downsample what actually gets plotted -- a screen can't show more than
+    # a few thousand distinct points anyway, and re-rendering hundreds of
+    # thousands of points on every slider move is what made it feel laggy.
+    # The depth panel and slider range still use the full-resolution history.
+    stride = max(1, len(history) // max_price_points)
+    x_plot = x[::stride]
+    reference_prices_plot = reference_prices[::stride]
+    mid_prices_plot = mid_prices[::stride]
+    best_bids_plot = best_bids[::stride]
+    best_asks_plot = best_asks[::stride]
+
     fig, (ax_price, ax_depth) = plt.subplots(2, 1, figsize=(10, 8))
     fig.canvas.manager.set_window_title(title)
     plt.subplots_adjust(bottom=0.2, hspace=0.4)
 
-    ax_price.plot(x, reference_prices, label='Reference Price', color='blue')
-    ax_price.plot(x, mid_prices, label='Mid Price', color='green')
-    ax_price.plot(x, best_bids, label='Best Bid', color='orange')
-    ax_price.plot(x, best_asks, label='Best Ask', color='red')
+    ax_price.plot(x_plot, reference_prices_plot, label='Reference Price', color='blue')
+    ax_price.plot(x_plot, mid_prices_plot, label='Mid Price', color='green')
+    ax_price.plot(x_plot, best_bids_plot, label='Best Bid', color='orange')
+    ax_price.plot(x_plot, best_asks_plot, label='Best Ask', color='red')
     ax_price.set_xlabel(x_label)
     ax_price.set_ylabel('Price')
     ax_price.set_title('Price Evolution Over Time')
@@ -105,11 +116,26 @@ def show_interactive(history, title="Simulation"):
     slider_ax = fig.add_axes([0.2, 0.05, 0.6, 0.03])
     slider = Slider(slider_ax, 'Step', valmin=0, valmax=len(history) - 1, valinit=0, valstep=1)
 
+    # Blitting: cache the price panel as a static background image once,
+    # so slider moves only redraw the marker + depth panel and blit those
+    # over the cached background, instead of re-rendering the whole figure
+    # (including the price lines) on every single move.
+    fig.canvas.draw()
+    price_background = fig.canvas.copy_from_bbox(ax_price.bbox)
+
     def on_slider_change(val):
         step = int(slider.val)
+
+        fig.canvas.restore_region(price_background)
         current_marker.set_xdata([x[step], x[step]])
+        ax_price.draw_artist(current_marker)
+        fig.canvas.blit(ax_price.bbox)
+
         _draw_depth(ax_depth, history[step]['depth_snapshot'])
-        fig.canvas.draw_idle()
+        ax_depth.draw_artist(ax_depth.patch)
+        for artist in ax_depth.get_children():
+            ax_depth.draw_artist(artist)
+        fig.canvas.blit(ax_depth.bbox)
 
     slider.on_changed(on_slider_change)
 
