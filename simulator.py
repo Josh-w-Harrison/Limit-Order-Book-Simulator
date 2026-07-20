@@ -4,7 +4,7 @@ import numpy as np
 from order import market_event_type
 
 class Simulator:
-    def __init__(self, order_book, market_data_generator, max_age = 10, seed=None):
+    def __init__(self, order_book, market_data_generator, max_age = 10, seed=None, strategy=None):
         self.order_book = order_book
         self.market_data_generator = market_data_generator
         self.max_age = max_age
@@ -12,6 +12,7 @@ class Simulator:
         self._tick_count = 0
         self._rng = np.random.default_rng(seed)
         self._poisson_lambda = 3.0  # Default lambda for Poisson distribution
+        self.strategy = strategy  # Optional MarketMaker (or any object with on_fills/on_tick); None runs the sim with no strategy attached
 
     def step(self):
         event = self.market_data_generator.next_event()
@@ -40,6 +41,8 @@ class Simulator:
 
             for _ in range(K):
                 fills, remaining = self.step()
+                if self.strategy is not None:
+                    self.strategy.on_fills(fills)
                 history.append({
                     'reference_price': self.market_data_generator.get_reference_price(),
                     'best_bid': self.order_book.best_bid(),
@@ -58,6 +61,9 @@ class Simulator:
                 order_id, _ = self.trade_ages.popleft()
                 self.order_book.cancel_order(order_id)
 
+            if self.strategy is not None:
+                self.strategy.on_tick(self.order_book)
+
         return history
 
     def run_replay(self):
@@ -66,6 +72,8 @@ class Simulator:
             try:
                 self._tick_count += 1
                 fills, remaining = self.step()
+                if self.strategy is not None:
+                    self.strategy.on_fills(fills)
                 history.append({
                     'timestamp': self.market_data_generator.get_last_event_time(),
                     'reference_price': self.market_data_generator.get_reference_price(),
@@ -79,6 +87,8 @@ class Simulator:
                     'depth_snapshot': self.order_book.get_depth(),
                     'tick': self._tick_count
                 })
+                if self.strategy is not None:
+                    self.strategy.on_tick(self.order_book)
 
             except StopIteration:
                 break

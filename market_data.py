@@ -86,9 +86,10 @@ class HistoricalMarketDataGenerator:
 
 
 class LOBSTERMarketDataGenerator:
-    def __init__(self, message_csv_path, seed=None):
+    def __init__(self, message_csv_path, seed=None, start_row=0, end_row=None):
         df = pd.read_csv(message_csv_path, header=None,
                           names=['Time', 'EventType', 'OrderID', 'Size', 'Price', 'Direction'])
+        df = df.iloc[start_row:end_row]
         self._times = df['Time'].tolist()
         self._event_types = df['EventType'].tolist()
         self._order_ids = df['OrderID'].tolist()

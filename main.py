@@ -2,47 +2,31 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
 from market_data import MarketDataGenerator, HistoricalMarketDataGenerator, LOBSTERMarketDataGenerator
+from market_maker import MarketMaker
 from order_book import OrderBook
 from simulator import Simulator
 
 
-def build_synthetic_history(n_ticks, initial_price=100.0, seed=None):
-    """
-    Build a synthetic simulation run (random-walk reference price) and
-    return the history list of dicts, ready to be passed to
-    show_interactive().
-    """
+def build_synthetic_history(n_ticks, initial_price=100.0, seed=None, strategy=None):
     market_data_generator = MarketDataGenerator(initial_price=initial_price, seed=seed)
     order_book = OrderBook()
-    simulator = Simulator(order_book, market_data_generator, seed=seed)
+    simulator = Simulator(order_book, market_data_generator, seed=seed, strategy=strategy)
     history = simulator.run(n_ticks)
     return history
 
 
-def build_historical_history(csv_path, n_ticks, seed=None):
-    """
-    Build a simulation run driven by a real historical price series (see
-    fetch_historical_data.py / HistoricalMarketDataGenerator) and return
-    the history list of dicts, ready to be passed to show_interactive().
-    """
+def build_historical_history(csv_path, n_ticks, seed=None, strategy=None):
     market_data_generator = HistoricalMarketDataGenerator(csv_path, seed=seed)
     order_book = OrderBook()
-    simulator = Simulator(order_book, market_data_generator, seed=seed)
+    simulator = Simulator(order_book, market_data_generator, seed=seed, strategy=strategy)
     history = simulator.run(n_ticks)
     return history
 
 
-def build_lobster_history(message_csv_path, seed=None):
-    """
-    Build a simulation run replaying real order-by-order flow from a
-    LOBSTER message file and return the history list of dicts, ready to
-    be passed to show_interactive(). Uses run_replay() instead of
-    run(n_ticks), since the message file itself determines how many
-    events exist rather than a fixed tick count.
-    """
+def build_lobster_history(message_csv_path, seed=None, strategy=None):
     market_data_generator = LOBSTERMarketDataGenerator(message_csv_path, seed=seed)
     order_book = OrderBook()
-    simulator = Simulator(order_book, market_data_generator, seed=seed)
+    simulator = Simulator(order_book, market_data_generator, seed=seed, strategy=strategy)
     history = simulator.run_replay()
     return history
 
@@ -69,12 +53,37 @@ def _draw_depth(ax, depth_snapshot):
     ax.legend(loc='upper right')
 
 
-def show_interactive(history, title="Simulation", max_price_points=3000):
-    """
-    Build the matplotlib figure: top panel with the four price series
-    and a slider, bottom panel with the depth chart for whichever step
-    the slider is on. Blocks on plt.show().
-    """
+def _mm_entry_for_step(strategy, history, step):
+    if strategy is None:
+        return None
+    return strategy.history[history[step]['tick'] - 1]
+
+
+def _fmt(value):
+    return "N/A" if value is None else f"{value:.2f}"
+
+
+def _build_stats_text(step, history, strategy):
+    entry = history[step]
+    lines = [
+        f"Reference: {_fmt(entry['reference_price'])}",
+        f"Mid: {_fmt(entry['mid_price'])}",
+        f"Best Bid: {_fmt(entry['best_bid'])}",
+        f"Best Ask: {_fmt(entry['best_ask'])}",
+    ]
+    mm_entry = _mm_entry_for_step(strategy, history, step)
+    if mm_entry is not None:
+        lines += [
+            "",
+            f"MM Bid: {_fmt(mm_entry['bid_price'])}",
+            f"MM Ask: {_fmt(mm_entry['ask_price'])}",
+            f"MM Inventory: {mm_entry['inventory']}",
+            f"MM Cash: {_fmt(mm_entry['cash'])}",
+        ]
+    return "\n".join(lines)
+
+
+def show_interactive(history, strategy=None, title="Simulation", max_price_points=3000):
     # Real replays (e.g. LOBSTER) carry a real timestamp per entry; synthetic/
     # historical runs don't, so fall back to the step index as the x-axis.
     x = [entry.get('timestamp') if entry.get('timestamp') is not None else i
@@ -85,10 +94,13 @@ def show_interactive(history, title="Simulation", max_price_points=3000):
     best_bids = [entry['best_bid'] if entry['best_bid'] is not None else float('nan') for entry in history]
     best_asks = [entry['best_ask'] if entry['best_ask'] is not None else float('nan') for entry in history]
 
-    # Downsample what actually gets plotted -- a screen can't show more than
-    # a few thousand distinct points anyway, and re-rendering hundreds of
-    # thousands of points on every slider move is what made it feel laggy.
-    # The depth panel and slider range still use the full-resolution history.
+    if strategy is not None:
+        mm_bids = [_mm_entry_for_step(strategy, history, i)['bid_price'] for i in range(len(history))]
+        mm_asks = [_mm_entry_for_step(strategy, history, i)['ask_price'] for i in range(len(history))]
+        mm_bids = [v if v is not None else float('nan') for v in mm_bids]
+        mm_asks = [v if v is not None else float('nan') for v in mm_asks]
+
+    # Downsample what actually gets plotted so that the interactive plot doesn't get bogged down with thousands of points
     stride = max(1, len(history) // max_price_points)
     x_plot = x[::stride]
     reference_prices_plot = reference_prices[::stride]
@@ -104,22 +116,27 @@ def show_interactive(history, title="Simulation", max_price_points=3000):
     ax_price.plot(x_plot, mid_prices_plot, label='Mid Price', color='green')
     ax_price.plot(x_plot, best_bids_plot, label='Best Bid', color='orange')
     ax_price.plot(x_plot, best_asks_plot, label='Best Ask', color='red')
+    if strategy is not None:
+        ax_price.plot(x_plot, mm_bids[::stride], label='MM Bid', color='darkgreen', linestyle='--')
+        ax_price.plot(x_plot, mm_asks[::stride], label='MM Ask', color='darkred', linestyle='--')
     ax_price.set_xlabel(x_label)
     ax_price.set_ylabel('Price')
     ax_price.set_title('Price Evolution Over Time')
-    ax_price.legend()
+    ax_price.legend(loc='upper left')
 
     current_marker = ax_price.axvline(x=x[0], color='black', linestyle='--')
+
+    stats_text = ax_price.text(
+        0.99, 0.98, _build_stats_text(0, history, strategy),
+        transform=ax_price.transAxes, ha='right', va='top', fontsize=8,
+        family='monospace', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+    )
 
     _draw_depth(ax_depth, history[0]['depth_snapshot'])
 
     slider_ax = fig.add_axes([0.2, 0.05, 0.6, 0.03])
     slider = Slider(slider_ax, 'Step', valmin=0, valmax=len(history) - 1, valinit=0, valstep=1)
 
-    # Blitting: cache the price panel as a static background image once,
-    # so slider moves only redraw the marker + depth panel and blit those
-    # over the cached background, instead of re-rendering the whole figure
-    # (including the price lines) on every single move.
     fig.canvas.draw()
     price_background = fig.canvas.copy_from_bbox(ax_price.bbox)
 
@@ -128,7 +145,9 @@ def show_interactive(history, title="Simulation", max_price_points=3000):
 
         fig.canvas.restore_region(price_background)
         current_marker.set_xdata([x[step], x[step]])
+        stats_text.set_text(_build_stats_text(step, history, strategy))
         ax_price.draw_artist(current_marker)
+        ax_price.draw_artist(stats_text)
         fig.canvas.blit(ax_price.bbox)
 
         _draw_depth(ax_depth, history[step]['depth_snapshot'])
@@ -143,13 +162,16 @@ def show_interactive(history, title="Simulation", max_price_points=3000):
 
 
 if __name__ == "__main__":
-    synthetic_history = build_synthetic_history(n_ticks=400, seed=42)
-    show_interactive(synthetic_history, title="Synthetic Data Simulation")
+    # A fresh MarketMaker per run -- sharing one instance across runs would
+    # carry inventory/cash/history over from the previous sim's OrderBook,
+    # corrupting both the PnL numbers and the per-tick history indexing.
+    synthetic_market_maker = MarketMaker(half_spread=0.25, skew_coefficient=0.01, quote_size=20)
+    synthetic_history = build_synthetic_history(n_ticks=400, seed=42, strategy=synthetic_market_maker)
+    show_interactive(synthetic_history, strategy=synthetic_market_maker, title="Synthetic Data Simulation (with Market Maker)")
 
     historical_history = build_historical_history("data/AAPL_1m.csv", n_ticks=400, seed=42)
     show_interactive(historical_history, title="Historical Data Simulation (AAPL, 1m)")
 
-    lobster_history = build_lobster_history(
-        "data/LOBSTER_SampleFile_AMZN_2012-06-21_10/AMZN_2012-06-21_34200000_57600000_message_10.csv"
-    )
-    show_interactive(lobster_history, title="Real Order Flow Simulation (LOBSTER, AMZN)")
+    lobster_market_maker = MarketMaker(half_spread=0.25, skew_coefficient=0.01, quote_size=20)
+    lobster_history = build_lobster_history("data/LOBSTER_SampleFile_AMZN_2012-06-21_10/AMZN_2012-06-21_34200000_57600000_message_10.csv", strategy=lobster_market_maker)
+    show_interactive(lobster_history, strategy=lobster_market_maker, title="Real Order Flow Simulation (LOBSTER, AMZN)")
