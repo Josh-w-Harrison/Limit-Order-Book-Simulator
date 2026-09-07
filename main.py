@@ -170,7 +170,7 @@ if __name__ == "__main__":
     synthetic_history = build_synthetic_history(n_ticks=400, seed=42, strategy=synthetic_market_maker)
     show_interactive(synthetic_history, strategy=synthetic_market_maker, title="Synthetic Data Simulation (with Market Maker)")
 
-    avellaneda_market_maker = AvellanedaStoikovMarketMaker(gamma=1e-4, sigma=0.5, k=20, terminal_time=400, quote_size=20)
+    avellaneda_market_maker = AvellanedaStoikovMarketMaker(gamma=1e-4, sigma=0.5, k=20, terminal_time=400, quote_size=20, max_inventory=100)
     avellaneda_history = build_synthetic_history(n_ticks=400, seed=42, strategy=avellaneda_market_maker)
     show_interactive(avellaneda_history, strategy=avellaneda_market_maker, title="Synthetic Data Simulation (with Avellaneda-Stoikov Market Maker)")
 
@@ -180,3 +180,13 @@ if __name__ == "__main__":
     lobster_market_maker = MarketMaker(half_spread=0.25, skew_coefficient=0.01, quote_size=20)
     lobster_history = build_lobster_history("data/LOBSTER_SampleFile_AMZN_2012-06-21_10/AMZN_2012-06-21_34200000_57600000_message_10.csv", strategy=lobster_market_maker)
     show_interactive(lobster_history, strategy=lobster_market_maker, title="Real Order Flow Simulation (LOBSTER, AMZN)")
+
+    # LOBSTER timestamps are real seconds-after-midnight (this sample file spans
+    # 34200-57600, i.e. 09:30-16:00), so terminal_time=57600 is the actual session
+    # close, not an arbitrary tick count. gamma/sigma/k/max_inventory are the best
+    # combination found by backtest.py's Avellaneda-Stoikov grid search against
+    # this same file (train PnL +21.70, test PnL +2.45) -- rerun that grid search
+    # if the data file changes.
+    lobster_avellaneda_market_maker = AvellanedaStoikovMarketMaker(gamma=1e-6, sigma=0.01, k=10, terminal_time=57600, quote_size=10, max_inventory=25)
+    lobster_avellaneda_history = build_lobster_history("data/LOBSTER_SampleFile_AMZN_2012-06-21_10/AMZN_2012-06-21_34200000_57600000_message_10.csv", strategy=lobster_avellaneda_market_maker)
+    show_interactive(lobster_avellaneda_history, strategy=lobster_avellaneda_market_maker, title="Real Order Flow Simulation (LOBSTER, AMZN, Avellaneda-Stoikov)")

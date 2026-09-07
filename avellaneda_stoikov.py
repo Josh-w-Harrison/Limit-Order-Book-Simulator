@@ -47,16 +47,26 @@ def optimal_spread(gamma, sigma, time_remaining, k):
 
 
 class AvellanedaStoikovMarketMaker(BaseMarketMaker):
-    def __init__(self, gamma, sigma, k, terminal_time, quote_size):
+    def __init__(self, gamma, sigma, k, terminal_time, quote_size, max_inventory=None):
         super().__init__(quote_size)
         self.gamma = gamma
         self.sigma = sigma
         self.k = k
         self.terminal_time = terminal_time
+        self.max_inventory = max_inventory
 
     def compute_quotes(self, order_book, timestamp):
         s = order_book.mid_price() if order_book.mid_price() is not None else self.reference_price
         time_remaining = max(0, self.terminal_time - timestamp)
         r = reservation_price(s, self.inventory, self.gamma, self.sigma, time_remaining)
         spread = optimal_spread(self.gamma, self.sigma, time_remaining, self.k)
-        return (r - spread / 2, r + spread / 2)
+        bid_price = r - spread / 2
+        ask_price = r + spread / 2
+
+        if self.max_inventory is not None:
+            if self.inventory >= self.max_inventory:
+                bid_price = None  # already at/over the long cap -- stop buying
+            if self.inventory <= -self.max_inventory:
+                ask_price = None  # already at/over the short cap -- stop selling
+
+        return (bid_price, ask_price)

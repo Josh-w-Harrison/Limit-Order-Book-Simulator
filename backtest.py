@@ -1,4 +1,5 @@
 import itertools
+from functools import partial
 
 def run_backtest(simulator, n_ticks=None):
     if simulator.strategy is None:
@@ -79,32 +80,38 @@ def _lobster_row_count(message_csv_path):
         return sum(1 for _ in f)
 
 
-def make_lobster_train_simulator(params, message_csv_path=LOBSTER_MESSAGE_CSV, train_fraction=0.7):
+def make_lobster_train_simulator(params, strategy_cls=None, message_csv_path=LOBSTER_MESSAGE_CSV, train_fraction=0.7):
     from market_data import LOBSTERMarketDataGenerator
     from order_book import OrderBook
     from simulator import Simulator
     from market_maker import MarketMaker
+
+    if strategy_cls is None:
+        strategy_cls = MarketMaker
 
     n_rows = _lobster_row_count(message_csv_path)
     split_row = int(n_rows * train_fraction)
     generator = LOBSTERMarketDataGenerator(message_csv_path, end_row=split_row)
     order_book = OrderBook()
-    strategy = MarketMaker(**params)
+    strategy = strategy_cls(**params)
     simulator = Simulator(order_book, generator, strategy=strategy)
     return simulator, None
 
 
-def make_lobster_test_simulator(params, message_csv_path=LOBSTER_MESSAGE_CSV, train_fraction=0.7):
+def make_lobster_test_simulator(params, strategy_cls=None, message_csv_path=LOBSTER_MESSAGE_CSV, train_fraction=0.7):
     from market_data import LOBSTERMarketDataGenerator
     from order_book import OrderBook
     from simulator import Simulator
     from market_maker import MarketMaker
 
+    if strategy_cls is None:
+        strategy_cls = MarketMaker
+
     n_rows = _lobster_row_count(message_csv_path)
     split_row = int(n_rows * train_fraction)
     generator = LOBSTERMarketDataGenerator(message_csv_path, start_row=split_row)
     order_book = OrderBook()
-    strategy = MarketMaker(**params)
+    strategy = strategy_cls(**params)
     simulator = Simulator(order_book, generator, strategy=strategy)
     return simulator, None
 
@@ -156,4 +163,33 @@ if __name__ == "__main__":
     print(f"Test PnL:    {result['test_pnl']:.2f}")
     print("\nAll combinations (sorted by train PnL):")
     for r in sorted(result['all_results'], key=lambda r: -r['train_pnl']):
+        print(f"  {r['params']}  train_pnl={r['train_pnl']:.2f}")
+
+    # Grid search the Avellaneda-Stoikov strategy against the same real LOBSTER order flow.
+    from avellaneda_stoikov import AvellanedaStoikovMarketMaker
+
+    avellaneda_param_grid = {
+        # log-spaced -- gamma is not order-1 (see the scale note in avellaneda_stoikov.py);
+        # a linear grid here would land entirely inside one degenerate regime. Narrowed to
+        # two extremes after the first sweep showed gamma barely moves PnL at this scale --
+        # k and max_inventory turned out to matter far more, so resolution went there instead.
+        'gamma': [1e-6, 1e-4],
+        'sigma': [0.01, 0.02],
+        'k': [3, 5, 10, 20],  # first sweep only tried 10/20 and k=10 dominated -- pushing lower to see if the trend continues
+        'terminal_time': [57600],  # the actual LOBSTER session close (seconds after midnight) -- a property of the data file, not a free parameter
+        'quote_size': [10],
+        'max_inventory': [25, 50, 100],  # first sweep fixed this at 50 by feel -- now actually searched
+    }
+
+    avellaneda_train_builder = partial(make_lobster_train_simulator, strategy_cls=AvellanedaStoikovMarketMaker)
+    avellaneda_test_builder = partial(make_lobster_test_simulator, strategy_cls=AvellanedaStoikovMarketMaker)
+
+    print("\n--- Avellaneda-Stoikov grid search against real LOBSTER data (train/test split) ---")
+    avellaneda_result = optimise_parameters(avellaneda_param_grid, avellaneda_train_builder, avellaneda_test_builder)
+
+    print(f"Best params: {avellaneda_result['best_params']}")
+    print(f"Train PnL:   {avellaneda_result['train_pnl']:.2f}")
+    print(f"Test PnL:    {avellaneda_result['test_pnl']:.2f}")
+    print("\nAll combinations (sorted by train PnL):")
+    for r in sorted(avellaneda_result['all_results'], key=lambda r: -r['train_pnl']):
         print(f"  {r['params']}  train_pnl={r['train_pnl']:.2f}")

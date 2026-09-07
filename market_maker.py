@@ -68,11 +68,13 @@ class BaseMarketMaker:
 
         bid_price, ask_price = self.compute_quotes(order_book, timestamp)
 
-        # Clamp: never submit a quote that would immediately cross the book and trade against other resting flow
+        # Clamp: never submit a quote that would immediately cross the book and trade against other resting flow.
+        # compute_quotes may also return None for a side to deliberately withhold it (e.g. a risk limit) --
+        # treated identically to a cross: that side is simply not submitted this tick.
         best_bid = order_book.best_bid()
         best_ask = order_book.best_ask()
-        would_cross_bid = best_ask is not None and bid_price >= best_ask
-        would_cross_ask = best_bid is not None and ask_price <= best_bid
+        would_cross_bid = bid_price is None or (best_ask is not None and bid_price >= best_ask)
+        would_cross_ask = ask_price is None or (best_bid is not None and ask_price <= best_bid)
 
         # Place new orders
         if would_cross_bid:
