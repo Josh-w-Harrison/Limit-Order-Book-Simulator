@@ -1,10 +1,19 @@
 from order import Order, order_side
 
 
-class MarketMaker:
-    def __init__(self, half_spread, skew_coefficient, quote_size):
-        self.half_spread = half_spread
-        self.skew_coefficient = skew_coefficient
+class BaseMarketMaker:
+    """
+    Shared quoting plumbing for market-making strategies: fill tracking (on_fills),
+    cancel-and-replace with a crossing clamp, and per-tick history recording (on_tick).
+
+    Subclasses implement compute_quotes() to turn their own pricing model into a
+    (bid_price, ask_price) pair; everything else -- resting-order bookkeeping,
+    refusing to submit a quote that would immediately cross the book, and recording
+    {inventory, cash, reference_price, bid_price, ask_price} per tick -- lives here
+    once so every strategy gets it identically.
+    """
+
+    def __init__(self, quote_size):
         self.quote_size = quote_size
         self.inventory = 0
         self.reference_price = None  # Own fair-value estimate; bootstrapped then trade-print-driven, see class docstring
@@ -14,6 +23,14 @@ class MarketMaker:
         self.ask_remaining = 0
         self.cash = 0  # Track cash for PnL calculations
         self.history = []  # One snapshot per on_tick call -- {inventory, cash, reference_price, bid_price, ask_price}, for plotting/inspection
+
+    def compute_quotes(self, order_book, timestamp):
+        """
+        Return (bid_price, ask_price) for this tick, using self.reference_price,
+        self.inventory, and whatever else the concrete strategy needs from
+        order_book/timestamp. Must be overridden by subclasses.
+        """
+        raise NotImplementedError
 
     def on_fills(self, fills):
         for trade in fills:
@@ -32,7 +49,7 @@ class MarketMaker:
 
         self.reference_price = fills[-1].price if fills else self.reference_price  # Update reference price from last trade print
 
-    def on_tick(self, order_book):
+    def on_tick(self, order_book, timestamp=None):
         if self.reference_price is None:
             self.reference_price = order_book.mid_price()  # Bootstrap on first tick
         if self.reference_price is None:
@@ -49,9 +66,7 @@ class MarketMaker:
             order_book.cancel_order(self.ask_order_id)
             self.ask_order_id = None
 
-        skewed_mid = self.reference_price - self.skew_coefficient * self.inventory
-        bid_price = skewed_mid - self.half_spread
-        ask_price = skewed_mid + self.half_spread
+        bid_price, ask_price = self.compute_quotes(order_book, timestamp)
 
         # Clamp: never submit a quote that would immediately cross the book and trade against other resting flow
         best_bid = order_book.best_bid()
@@ -83,3 +98,14 @@ class MarketMaker:
             'bid_price': None if would_cross_bid else bid_price,
             'ask_price': None if would_cross_ask else ask_price,
         })
+
+
+class MarketMaker(BaseMarketMaker):
+    def __init__(self, half_spread, skew_coefficient, quote_size):
+        super().__init__(quote_size)
+        self.half_spread = half_spread
+        self.skew_coefficient = skew_coefficient
+
+    def compute_quotes(self, order_book, timestamp):
+        skewed_mid = self.reference_price - self.skew_coefficient * self.inventory
+        return skewed_mid - self.half_spread, skewed_mid + self.half_spread

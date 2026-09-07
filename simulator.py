@@ -62,7 +62,7 @@ class Simulator:
                 self.order_book.cancel_order(order_id)
 
             if self.strategy is not None:
-                self.strategy.on_tick(self.order_book)
+                self.strategy.on_tick(self.order_book, self.market_data_generator.get_last_event_time())
 
         return history
 
@@ -88,7 +88,7 @@ class Simulator:
                     'tick': self._tick_count
                 })
                 if self.strategy is not None:
-                    self.strategy.on_tick(self.order_book)
+                    self.strategy.on_tick(self.order_book, self.market_data_generator.get_last_event_time())
 
             except StopIteration:
                 break

@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
+from avellaneda_stoikov import AvellanedaStoikovMarketMaker
 from market_data import MarketDataGenerator, HistoricalMarketDataGenerator, LOBSTERMarketDataGenerator
 from market_maker import MarketMaker
 from order_book import OrderBook
@@ -168,6 +169,10 @@ if __name__ == "__main__":
     synthetic_market_maker = MarketMaker(half_spread=0.25, skew_coefficient=0.01, quote_size=20)
     synthetic_history = build_synthetic_history(n_ticks=400, seed=42, strategy=synthetic_market_maker)
     show_interactive(synthetic_history, strategy=synthetic_market_maker, title="Synthetic Data Simulation (with Market Maker)")
+
+    avellaneda_market_maker = AvellanedaStoikovMarketMaker(gamma=1e-4, sigma=0.5, k=20, terminal_time=400, quote_size=20)
+    avellaneda_history = build_synthetic_history(n_ticks=400, seed=42, strategy=avellaneda_market_maker)
+    show_interactive(avellaneda_history, strategy=avellaneda_market_maker, title="Synthetic Data Simulation (with Avellaneda-Stoikov Market Maker)")
 
     historical_history = build_historical_history("data/AAPL_1m.csv", n_ticks=400, seed=42)
     show_interactive(historical_history, title="Historical Data Simulation (AAPL, 1m)")

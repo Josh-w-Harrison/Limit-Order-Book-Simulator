@@ -25,6 +25,7 @@ class MarketDataGenerator:
     def __init__(self, initial_price, seed=None):
         self._reference_price = initial_price
         self._rng = random.Random(seed)
+        self._tick_count = 0
 
     def next_event(self, mean_quantity=10):
         # Generate order side
@@ -46,9 +47,13 @@ class MarketDataGenerator:
     def advance_tick(self, volatility=0.5):
         # Random walk the reference price
         self._reference_price += self._rng.normalvariate(0, volatility)
+        self._tick_count += 1
 
     def get_reference_price(self):
         return self._reference_price
+
+    def get_last_event_time(self):
+        return self._tick_count
 
 
 class HistoricalMarketDataGenerator:
@@ -78,6 +83,9 @@ class HistoricalMarketDataGenerator:
 
     def get_reference_price(self):
         return self._reference_price
+
+    def get_last_event_time(self):
+        return self._current_index
 
     def advance_tick(self):
         self._current_index += 1
